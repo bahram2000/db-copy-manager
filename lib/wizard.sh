@@ -1,22 +1,48 @@
 #!/usr/bin/env bash
 # Interactive prompts and pre-flight validation.
 
+trim_ws() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "${s}"
+}
+
+mask_uri() {
+  local uri="$1"
+  if [[ "${uri}" =~ ^(postgres(ql)?://)([^:@/]+):([^@]+)@(.+)$ ]]; then
+    printf '%s%s:****@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[5]}"
+  else
+    printf '%s' "${uri}"
+  fi
+}
+
 prompt_uri() {
-  local label="$1"
+  local step="$1"
+  local label="$2"
   local uri=""
-  echo ""
-  echo "${label}"
-  echo "  Format: postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
-  echo "  URL-encode special characters in USER/PASSWORD (e.g. @ → %40)."
-  echo "  Example: postgresql://admin:secret@db.example.com:5432/myapp"
+
+  echo "" >&2
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+  echo "  STEP ${step} — ${label}" >&2
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+  echo "  Format: postgresql://USER:PASSWORD@HOST:PORT/DATABASE" >&2
+  echo "  URL-encode special characters in PASSWORD (e.g. @ → %40)." >&2
+  echo "" >&2
+
   while [[ -z "${uri}" ]]; do
-    read -r -p "  URI: " uri
-    uri="$(echo "${uri}" | xargs)"
+    read -r -p "  Paste ${label} URI: " uri </dev/tty
+    uri="$(trim_ws "${uri}")"
     if [[ -z "${uri}" ]]; then
-      echo "  URI cannot be empty."
+      echo "  ✗ URI cannot be empty." >&2
+    elif [[ ! "${uri}" =~ ^postgres(ql)?:// ]]; then
+      echo "  ✗ Must start with postgresql:// or postgres://" >&2
+      uri=""
     fi
   done
-  echo "${uri}"
+
+  echo "  ✓ Accepted: $(mask_uri "${uri}")" >&2
+  printf '%s' "${uri}"
 }
 
 confirm_yes_no() {
@@ -26,7 +52,7 @@ confirm_yes_no() {
   [[ "${default}" == "y" ]] && prompt_suffix="[Y/n]"
 
   local answer=""
-  read -r -p "${question} ${prompt_suffix}: " answer
+  read -r -p "${question} ${prompt_suffix}: " answer </dev/tty
   answer="$(echo "${answer}" | tr '[:upper:]' '[:lower:]')"
   answer="${answer:-${default}}"
 
@@ -77,15 +103,19 @@ run_preflight() {
   fi
 
   log_ok "All pre-flight checks passed."
-  echo "${src_size}"
+  return 0
 }
 
 print_banner() {
   echo ""
   echo "╔══════════════════════════════════════════════════════════╗"
   echo "║           PostgreSQL DB Copy Manager                     ║"
-  echo "║   Clone a database from source → destination             ║"
+  echo "║   Clone a database:  SOURCE  ──►  DESTINATION          ║"
   echo "╚══════════════════════════════════════════════════════════╝"
+  echo ""
+  echo "  You will be asked for two connection URIs, in order:"
+  echo "    1. SOURCE      — the database to copy FROM (remote OK)"
+  echo "    2. DESTINATION — the database to copy TO   (will be replaced)"
   echo ""
 }
 
@@ -94,24 +124,27 @@ run_wizard() {
 
   local source_uri dest_uri run_id pid
 
-  source_uri="$(prompt_uri "SOURCE database connection")"
-  dest_uri="$(prompt_uri "DESTINATION database connection")"
+  source_uri="$(prompt_uri "1/2" "SOURCE (copy FROM)")"
+  dest_uri="$(prompt_uri "2/2" "DESTINATION (copy TO)")"
 
   if [[ "${source_uri}" == "${dest_uri}" ]]; then
     log_error "Source and destination URIs are identical."
     return 1
   fi
 
-  run_preflight "${source_uri}" "${dest_uri}" >/dev/null || return 1
+  if ! run_preflight "${source_uri}" "${dest_uri}"; then
+    log_error "Pre-flight checks failed — clone NOT started."
+    return 1
+  fi
 
   echo ""
-  log_info "Summary"
-  log_info "  Source:      ${source_uri}"
-  log_info "  Destination: ${dest_uri}"
+  log_step "Confirm"
+  log_info "  Source (FROM):  $(mask_uri "${source_uri}")"
+  log_info "  Dest   (TO):    $(mask_uri "${dest_uri}")"
   echo ""
 
   if ! confirm_yes_no "Start clone in background?" "y"; then
-    log_info "Aborted."
+    log_info "Aborted by user — nothing was changed."
     return 0
   fi
 

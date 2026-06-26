@@ -21,6 +21,7 @@ require_commands() {
 
 test_pg_connection() {
   local role="$1"
+  local err
   apply_pg_env
 
   if psql -v ON_ERROR_STOP=1 -Atqc "SELECT 1" >/dev/null 2>&1; then
@@ -29,7 +30,9 @@ test_pg_connection() {
     return 0
   fi
 
-  log_error "${role} connection failed (${PG_CONN_LABEL})"
+  err="$(psql -v ON_ERROR_STOP=1 -Atqc "SELECT 1" 2>&1 >/dev/null || true)"
+  log_error "${role} connection FAILED (${PG_CONN_LABEL})"
+  [[ -n "${err}" ]] && log_error "  psql says: ${err}"
   clear_pg_env
   return 1
 }

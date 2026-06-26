@@ -55,12 +55,40 @@ print_detach_instructions() {
   echo ""
 }
 
+list_runs() {
+  local count=0
+  echo ""
+  echo "Recent clone runs:"
+  echo ""
+
+  if [[ ! -d "${STATE_DIR}" ]] || [[ -z "$(ls -A "${STATE_DIR}" 2>/dev/null)" ]]; then
+    echo "  (no runs yet — start one with ./clone-db.sh)"
+    echo ""
+    return 0
+  fi
+
+  for state_file in "${STATE_DIR}"/*.env; do
+    [[ -f "${state_file}" ]] || continue
+    local run_id="${state_file##*/}"
+    run_id="${run_id%.env}"
+    # shellcheck disable=SC1090
+    source "${state_file}"
+    echo "  ${run_id}  status=${STATUS}  started=${STARTED_AT:-?}"
+    count=$((count + 1))
+  done
+
+  echo ""
+  echo "  Check one:  ./clone-db.sh --status <RUN_ID>"
+  echo ""
+}
+
 show_run_status() {
   local run_id="$1"
   local state_file="${STATE_DIR}/${run_id}.env"
 
   if [[ ! -f "${state_file}" ]]; then
     log_error "No run found with id: ${run_id}"
+    list_runs
     return 1
   fi
 

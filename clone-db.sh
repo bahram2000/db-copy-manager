@@ -25,10 +25,11 @@ usage() {
 PostgreSQL DB Copy Manager
 
 Usage:
-  $(basename "$0")                 Run interactive clone wizard
-  $(basename "$0") --status RUN_ID Check status of a background clone
+  $(basename "$0")                   Run interactive clone wizard
+  $(basename "$0") --list              List all clone runs
+  $(basename "$0") --status [RUN_ID]   Show status (latest if RUN_ID omitted)
 
-Runs are stored under: ${RUN_DIR}/
+Runs and logs: ${RUN_DIR}/
 EOF
 }
 
@@ -37,14 +38,24 @@ main() {
 
   case "${1:-}" in
     --status)
-      [[ -n "${2:-}" ]] || { usage; exit 1; }
-      show_run_status "${2}"
+      if [[ -n "${2:-}" ]]; then
+        show_run_status "${2}"
+      else
+        list_runs
+      fi
+      ;;
+    --list)
+      list_runs
       ;;
     -h|--help)
       usage
       ;;
     "")
-      run_wizard
+      if ! run_wizard; then
+        echo ""
+        log_error "Wizard exited with errors. Nothing was started."
+        exit 1
+      fi
       ;;
     *)
       echo "Unknown option: $1" >&2
