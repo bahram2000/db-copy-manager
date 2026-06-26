@@ -59,16 +59,41 @@ get_server_version() {
   echo "${ver}"
 }
 
-destination_db_exists() {
-  apply_pg_env
+destination_database_exists() {
+  local db_name="$1"
+  apply_pg_admin_env
   local exists
   exists="$(psql -v ON_ERROR_STOP=1 -Atqc \
-    "SELECT 1 FROM pg_database WHERE datname = current_database()" 2>/dev/null)" || {
+    "SELECT 1 FROM pg_database WHERE datname = '${db_name}'" 2>/dev/null)" || {
     clear_pg_env
     return 1
   }
   clear_pg_env
   [[ "${exists}" == "1" ]]
+}
+
+terminate_database_connections() {
+  local db_name="$1"
+  apply_pg_admin_env
+
+  local count
+  count="$(psql -v ON_ERROR_STOP=1 -Atqc \
+    "SELECT COUNT(*) FROM pg_stat_activity WHERE datname = '${db_name}' AND pid <> pg_backend_pid()" \
+    2>/dev/null)" || {
+    clear_pg_env
+    return 1
+  }
+
+  if [[ "${count}" -gt 0 ]]; then
+    log_warn "Terminating ${count} active connection(s) to '${db_name}'..."
+    psql -v ON_ERROR_STOP=1 -Atqc \
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db_name}' AND pid <> pg_backend_pid()" \
+      >/dev/null 2>&1 || true
+    sleep 1
+  fi
+
+  clear_pg_env
+  return 0
 }
 
 human_bytes() {

@@ -63,28 +63,36 @@ update_state_status() {
 
 recreate_destination_database() {
   parse_pg_uri "${DEST_URI}"
-  apply_pg_env
+  validate_db_name "${PG_URI_DB}" || return 1
 
   local db_name="${PG_URI_DB}"
+  local err
   log_info "Preparing destination database '${db_name}'..."
 
-  if destination_db_exists; then
+  if destination_database_exists "${db_name}"; then
     log_warn "Database '${db_name}' exists on destination — dropping it."
-    dropdb --if-exists "${db_name}" || {
+    terminate_database_connections "${db_name}"
+
+    apply_pg_admin_env
+    err="$(dropdb --if-exists "${db_name}" 2>&1)" || {
       log_error "dropdb failed for '${db_name}'"
+      [[ -n "${err}" ]] && log_error "  ${err}"
       clear_pg_env
       return 1
     }
+    clear_pg_env
   fi
 
-  createdb "${db_name}" || {
+  apply_pg_admin_env
+  err="$(createdb "${db_name}" 2>&1)" || {
     log_error "createdb failed for '${db_name}'"
+    [[ -n "${err}" ]] && log_error "  ${err}"
     clear_pg_env
     return 1
   }
+  clear_pg_env
 
   log_ok "Destination database '${db_name}' is ready."
-  clear_pg_env
   return 0
 }
 
@@ -154,8 +162,8 @@ run_clone_job() {
   update_state_status "${run_id}" "running"
 
   log_step "Clone job ${run_id}"
-  log_info "Source:      ${SOURCE_URI}"
-  log_info "Destination: ${DEST_URI}"
+  log_info "Source:      $(mask_uri "${SOURCE_URI}")"
+  log_info "Destination: $(mask_uri "${DEST_URI}")"
   log_info "Log file:    ${SESSION_LOG}"
 
   if ! recreate_destination_database; then

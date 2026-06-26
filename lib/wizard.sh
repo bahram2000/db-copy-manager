@@ -8,15 +8,6 @@ trim_ws() {
   printf '%s' "${s}"
 }
 
-mask_uri() {
-  local uri="$1"
-  if [[ "${uri}" =~ ^(postgres(ql)?://)([^:@/]+):([^@]+)@(.+)$ ]]; then
-    printf '%s%s:****@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[5]}"
-  else
-    printf '%s' "${uri}"
-  fi
-}
-
 prompt_uri() {
   local step="$1"
   local label="$2"
@@ -98,8 +89,9 @@ run_preflight() {
     log_warn "Ensure the remote server has enough storage for ~$(human_bytes "${src_size}") (+ margin)."
   fi
 
-  if destination_db_exists; then
-    log_warn "Destination database already exists — it will be dropped and recreated."
+  if destination_database_exists "${PG_URI_DB}"; then
+    log_warn "Destination database '${PG_URI_DB}' already exists — it will be dropped and recreated."
+    log_warn "Active connections to that database will be terminated during the clone."
   fi
 
   log_ok "All pre-flight checks passed."

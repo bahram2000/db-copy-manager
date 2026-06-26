@@ -103,8 +103,8 @@ show_run_status() {
   echo "PID:         ${PID:-n/a}"
   echo "Started:     ${STARTED_AT:-n/a}"
   echo "Finished:    ${FINISHED_AT:-n/a}"
-  echo "Source:      ${SOURCE_URI:-unknown}"
-  echo "Destination: ${DEST_URI:-unknown}"
+  echo "Source:      $(mask_uri "${SOURCE_URI:-unknown}")"
+  echo "Destination: $(mask_uri "${DEST_URI:-unknown}")"
   echo "Log:         ${SESSION_LOG}"
   echo ""
 

@@ -67,6 +67,26 @@ parse_pg_uri() {
   return 0
 }
 
+MAINTENANCE_DB="postgres"
+
+mask_uri() {
+  local uri="$1"
+  if [[ "${uri}" =~ ^(postgres(ql)?://)([^:@/]+):([^@]+)@(.+)$ ]]; then
+    printf '%s%s:****@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[5]}"
+  else
+    printf '%s' "${uri}"
+  fi
+}
+
+validate_db_name() {
+  local name="$1"
+  if [[ ! "${name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+    log_error "Invalid database name: ${name}"
+    return 1
+  fi
+  return 0
+}
+
 apply_pg_env() {
   export PGHOST="${PG_URI_HOST}"
   export PGPORT="${PG_URI_PORT}"
@@ -75,6 +95,12 @@ apply_pg_env() {
   if [[ -n "${PG_URI_PASS}" ]]; then
     export PGPASSWORD="${PG_URI_PASS}"
   fi
+}
+
+# Admin commands (dropdb/createdb) must connect to a different database.
+apply_pg_admin_env() {
+  apply_pg_env
+  export PGDATABASE="${MAINTENANCE_DB}"
 }
 
 clear_pg_env() {
