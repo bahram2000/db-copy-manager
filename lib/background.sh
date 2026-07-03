@@ -5,11 +5,12 @@ launch_detached_clone() {
   local run_id="$1"
   local source_uri="$2"
   local dest_uri="$3"
+  local source_type="${4:-live}"
   local worker_log="${LOG_DIR}/${run_id}.worker.log"
   local pid_file="${STATE_DIR}/${run_id}.pid"
 
   mkdir -p "${LOG_DIR}" "${STATE_DIR}" "${DUMP_DIR}"
-  init_state_file "${run_id}" "${source_uri}" "${dest_uri}"
+  init_state_file "${run_id}" "${source_uri}" "${dest_uri}" "${source_type}"
 
   local worker_script="${RUN_DIR}/.worker-${run_id}.sh"
   cat > "${worker_script}" <<WORKER_EOF
@@ -21,6 +22,7 @@ source "\${SCRIPT_DIR}/lib/log.sh"
 source "\${SCRIPT_DIR}/lib/conn.sh"
 source "\${SCRIPT_DIR}/lib/prereq.sh"
 source "\${SCRIPT_DIR}/lib/storage.sh"
+source "\${SCRIPT_DIR}/lib/backup.sh"
 source "\${SCRIPT_DIR}/lib/clone.sh"
 
 run_clone_job '${run_id}'
@@ -96,6 +98,7 @@ show_run_status() {
   source "${state_file}"
   SOURCE_URI="$(cat "${STATE_DIR}/${run_id}.source.uri" 2>/dev/null || true)"
   DEST_URI="$(cat "${STATE_DIR}/${run_id}.dest.uri" 2>/dev/null || true)"
+  SOURCE_TYPE="$(resolve_source_type "${SOURCE_URI}" "${SOURCE_TYPE:-}")"
 
   echo ""
   echo "Run ID:      ${RUN_ID}"
@@ -103,7 +106,11 @@ show_run_status() {
   echo "PID:         ${PID:-n/a}"
   echo "Started:     ${STARTED_AT:-n/a}"
   echo "Finished:    ${FINISHED_AT:-n/a}"
-  echo "Source:      $(mask_uri "${SOURCE_URI:-unknown}")"
+  if [[ "${SOURCE_TYPE}" == "backup" ]]; then
+    echo "Source:      backup $(mask_backup_url "${SOURCE_URI:-unknown}")"
+  else
+    echo "Source:      $(mask_uri "${SOURCE_URI:-unknown}")"
+  fi
   echo "Destination: $(mask_uri "${DEST_URI:-unknown}")"
   echo "Log:         ${SESSION_LOG}"
   echo ""

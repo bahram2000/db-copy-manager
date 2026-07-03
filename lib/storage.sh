@@ -19,9 +19,9 @@ get_available_bytes_on_path() {
 
 check_local_destination_storage() {
   local required_bytes="$1"
+  local source_type="${2:-live}"
   local db_margin_bytes dump_margin_bytes
   db_margin_bytes="$(awk "BEGIN { printf \"%d\", ${required_bytes} * ${STORAGE_SAFETY_MARGIN} }")"
-  # Custom-format dump is often smaller than live DB; reserve full size to be safe.
   dump_margin_bytes="${db_margin_bytes}"
 
   log_step "Local destination storage check"
@@ -50,7 +50,11 @@ check_local_destination_storage() {
   mkdir -p "${DUMP_DIR}"
   dump_avail_bytes="$(get_available_bytes_on_path "${DUMP_DIR}")"
   log_info "Temporary dump directory:     ${DUMP_DIR}"
-  log_info "Space needed for dump file:   $(human_bytes "${dump_margin_bytes}")"
+  if [[ "${source_type}" == "backup" ]]; then
+    log_info "Space needed for download + dump: $(human_bytes "${dump_margin_bytes}")"
+  else
+    log_info "Space needed for dump file:   $(human_bytes "${dump_margin_bytes}")"
+  fi
   if [[ -n "${dump_avail_bytes}" && "${dump_avail_bytes}" -gt 0 ]]; then
     log_info "Available on dump volume:     $(human_bytes "${dump_avail_bytes}")"
     if [[ "${dump_avail_bytes}" -lt "${dump_margin_bytes}" ]]; then
@@ -61,7 +65,11 @@ check_local_destination_storage() {
     log_warn "Could not measure free space for ${DUMP_DIR}."
   fi
 
-  log_info "Source database size:         $(human_bytes "${required_bytes}")"
+  if [[ "${source_type}" == "backup" ]]; then
+    log_info "Estimated backup space:       $(human_bytes "${required_bytes}")"
+  else
+    log_info "Source database size:         $(human_bytes "${required_bytes}")"
+  fi
   log_ok "Local storage checks passed."
   return 0
 }

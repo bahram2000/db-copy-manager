@@ -21,18 +21,36 @@ init_state_file() {
   local run_id="$1"
   local source_uri="$2"
   local dest_uri="$3"
+  local source_type="${4:-live}"
   local state_file="${STATE_DIR}/${run_id}.env"
   mkdir -p "${STATE_DIR}"
   printf '%s' "${source_uri}" > "${STATE_DIR}/${run_id}.source.uri"
   printf '%s' "${dest_uri}" > "${STATE_DIR}/${run_id}.dest.uri"
   {
     printf 'RUN_ID=%s\n' "${run_id}"
+    printf 'SOURCE_TYPE=%s\n' "${source_type}"
     printf 'STATUS=pending\n'
     printf 'SESSION_LOG=%s\n' "${LOG_DIR}/${run_id}.log"
     printf 'PID=\n'
     printf 'STARTED_AT=%s\n' "$(_log_ts)"
     printf 'FINISHED_AT=\n'
   } > "${state_file}"
+}
+
+resolve_source_type() {
+  local source_uri="$1"
+  local source_type="${2:-}"
+
+  if [[ -n "${source_type}" ]]; then
+    printf '%s' "${source_type}"
+    return 0
+  fi
+
+  if is_backup_source_uri "${source_uri}"; then
+    echo "backup"
+  else
+    echo "live"
+  fi
 }
 
 load_run_state() {
@@ -46,7 +64,8 @@ load_run_state() {
   source "${state_file}"
   SOURCE_URI="$(cat "${STATE_DIR}/${run_id}.source.uri")"
   DEST_URI="$(cat "${STATE_DIR}/${run_id}.dest.uri")"
-  export SOURCE_URI DEST_URI
+  SOURCE_TYPE="$(resolve_source_type "${SOURCE_URI}" "${SOURCE_TYPE:-}")"
+  export SOURCE_URI DEST_URI SOURCE_TYPE
 }
 
 update_state_status() {
@@ -162,7 +181,11 @@ run_clone_job() {
   update_state_status "${run_id}" "running"
 
   log_step "Clone job ${run_id}"
-  log_info "Source:      $(mask_uri "${SOURCE_URI}")"
+  if [[ "${SOURCE_TYPE}" == "backup" ]]; then
+    log_info "Source:      backup $(mask_backup_url "${SOURCE_URI}")"
+  else
+    log_info "Source:      $(mask_uri "${SOURCE_URI}")"
+  fi
   log_info "Destination: $(mask_uri "${DEST_URI}")"
   log_info "Log file:    ${SESSION_LOG}"
 
@@ -171,7 +194,12 @@ run_clone_job() {
     return 1
   fi
 
-  if ! run_dump "${dump_file}"; then
+  if [[ "${SOURCE_TYPE}" == "backup" ]]; then
+    if ! run_acquire_dump_from_backup "${SOURCE_URI}" "${dump_file}" "${run_id}"; then
+      update_state_status "${run_id}" "failed"
+      return 1
+    fi
+  elif ! run_dump "${dump_file}"; then
     update_state_status "${run_id}" "failed"
     return 1
   fi

@@ -6,6 +6,7 @@
 #   ./clone-db.sh --status ID  Check a background run
 #
 # Requires: psql, pg_dump, pg_restore, createdb, dropdb (PostgreSQL client tools)
+# Backup source also needs: curl or wget, tar
 
 set -euo pipefail
 
@@ -16,6 +17,7 @@ source "${SCRIPT_DIR}/lib/log.sh"
 source "${SCRIPT_DIR}/lib/conn.sh"
 source "${SCRIPT_DIR}/lib/prereq.sh"
 source "${SCRIPT_DIR}/lib/storage.sh"
+source "${SCRIPT_DIR}/lib/backup.sh"
 source "${SCRIPT_DIR}/lib/clone.sh"
 source "${SCRIPT_DIR}/lib/background.sh"
 source "${SCRIPT_DIR}/lib/wizard.sh"
