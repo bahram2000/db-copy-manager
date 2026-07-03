@@ -16,7 +16,7 @@ log_write() {
   local level="$1"
   local message="$2"
   local line="[$(_log_ts)] [${level}] ${message}"
-  echo "${line}"
+  echo "${line}" >&2
   if [[ -n "${SESSION_LOG:-}" ]]; then
     echo "${line}" >> "${SESSION_LOG}"
   fi
@@ -28,6 +28,6 @@ log_error() { log_write "ERROR" "$1"; }
 log_ok()    { log_write "OK"    "$1"; }
 
 log_step() {
-  echo ""
+  echo "" >&2
   log_info "── $1 ──"
 }

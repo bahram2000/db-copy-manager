@@ -75,7 +75,8 @@ run_preflight_live_source() {
   log_info "Source database size: $(human_bytes "${src_size}")"
   [[ -n "${src_ver}" ]] && log_info "Source PostgreSQL version: ${src_ver}"
 
-  printf '%s' "${src_size}"
+  PREFLIGHT_REQUIRED_BYTES="${src_size}"
+  return 0
 }
 
 run_preflight_backup_source() {
@@ -93,13 +94,14 @@ run_preflight_backup_source() {
     log_info "Backup archive size: $(human_bytes "${archive_size}")"
     estimated_size="$(awk "BEGIN { printf \"%d\", ${archive_size} * 2 }")"
     log_info "Estimated space for download + extract: $(human_bytes "${estimated_size}")"
-    printf '%s' "${estimated_size}"
+    PREFLIGHT_REQUIRED_BYTES="${estimated_size}"
     return 0
   fi
 
   log_warn "Could not determine backup archive size from HTTP headers."
   log_warn "Local disk checks will use a conservative estimate."
-  printf '%s' "1073741824"
+  PREFLIGHT_REQUIRED_BYTES="1073741824"
+  return 0
 }
 
 run_preflight() {
@@ -118,10 +120,11 @@ run_preflight() {
   fi
 
   if [[ "${source_type}" == "backup" ]]; then
-    required_bytes="$(run_preflight_backup_source "${source_uri}")" || return 1
+    run_preflight_backup_source "${source_uri}" || return 1
   else
-    required_bytes="$(run_preflight_live_source "${source_uri}")" || return 1
+    run_preflight_live_source "${source_uri}" || return 1
   fi
+  required_bytes="${PREFLIGHT_REQUIRED_BYTES}"
 
   parse_pg_uri "${dest_uri}" || return 1
   test_pg_connection "Destination" || return 1

@@ -65,19 +65,39 @@ fetch_backup_url_size_bytes() {
   return 1
 }
 
+_curl_http_code() {
+  local url="$1"
+  shift
+  curl -fsS "$@" -o /dev/null -w '%{http_code}' "${url}" 2>/dev/null || echo "000"
+}
+
 test_backup_url_reachable() {
   local url="$1"
   local cmd http_code
 
-  cmd="$(_get_http_download_cmd)" || return 1
+  cmd="$(_get_http_download_cmd)" || {
+    log_error "Missing curl or wget for backup URL check."
+    return 1
+  }
 
   if [[ "${cmd}" == "curl" ]]; then
-    http_code="$(curl -fsSIL -o /dev/null -w '%{http_code}' "${url}" 2>/dev/null || echo "000")"
+    http_code="$(_curl_http_code "${url}" -I)"
+    if [[ ! "${http_code}" =~ ^[23] ]]; then
+      log_info "HEAD returned HTTP ${http_code:-unknown}; trying ranged GET..."
+      http_code="$(_curl_http_code "${url}" -L -r 0-0)"
+    fi
   else
     http_code="$(wget --spider -S "${url}" 2>&1 | awk '
       /^  HTTP\// { code=$2 }
       END { print code+0 ? code : "000" }
     ')"
+    if [[ ! "${http_code}" =~ ^[23] ]]; then
+      log_info "HEAD returned HTTP ${http_code:-unknown}; trying ranged GET..."
+      http_code="$(wget -S --header='Range: bytes=0-0' -O /dev/null "${url}" 2>&1 | awk '
+        /^  HTTP\// { code=$2 }
+        END { print code+0 ? code : "000" }
+      ')"
+    fi
   fi
 
   if [[ "${http_code}" =~ ^[23] ]]; then
