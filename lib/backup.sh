@@ -20,14 +20,13 @@ require_backup_commands() {
     log_error "Missing required command: tar"
     return 1
   fi
-  if command -v curl >/dev/null 2>&1; then
-    return 0
+
+  if ! ensure_download_client; then
+    log_error "Missing required command: curl or wget (needed for backup URL download)."
+    return 1
   fi
-  if command -v wget >/dev/null 2>&1; then
-    return 0
-  fi
-  log_error "Missing required command: curl or wget (needed for backup URL download)."
-  return 1
+
+  return 0
 }
 
 _get_http_download_cmd() {
